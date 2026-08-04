@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>كشف الغياب والتأخر</title>
+  <style>
+    :root {
+      --bg-color: #F2F2F7;
+      --card-bg: #FFFFFF;
+      --text-primary: #1C1C1E;
+      --text-secondary: #8E8E93;
+      --accent: #007AFF;
+      --purple: #5856D6;
+      --red: #FF3B30;
+      --yellow: #FF9500;
+      --green: #34C759;
+      --gray-btn: #E5E5EA;
+      --gray-btn-text: #8E8E93;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      padding-bottom: 120px;
+    }
+
+    header {
+      background-color: var(--card-bg);
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .header-title {
+      font-size: 20px;
+      font-weight: 800;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .controls-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    select, input[type="date"], input[type="text"] {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid #D1D1D6;
+      background: #F9F9FB;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      outline: none;
+    }
+
+    .controls-bar select, .controls-bar input[type="date"] {
+      flex: 1;
+      text-align: center;
+    }
+
+    .stats-container {
+      display: flex;
+      gap: 10px;
+    }
+
+    .stat-card {
+      flex: 1;
+      background: #F9F9FB;
+      border-radius: 10px;
+      padding: 8px;
+      text-align: center;
+      border: 1px solid #E5E5EA;
+    }
+
+    .stat-number { font-size: 18px; font-weight: 800; }
+    .stat-card.absent .stat-number { color: var(--red); }
+    .stat-card.late .stat-number { color: var(--yellow); }
+    .stat-label { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+
+    .student-list {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .student-card {
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .student-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      flex: 1;
+      word-break: break-word; /* سماح بالالتفاف في حال الأسماء الطويلة */
+    }
+
+    .attendance-buttons { display: flex; gap: 4px; flex-shrink: 0; }
+
+    /* تم تصغير حجم الزرين */
+    .btn-status {
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      background-color: var(--gray-btn);
+      color: var(--gray-btn-text);
+      transition: all 0.15s ease;
+      min-width: 48px;
+      height: 30px;
+    }
+
+    .btn-status.active-absent { background-color: var(--red); color: #FFFFFF; }
+    .btn-status.active-late { background-color: var(--yellow); color: #FFFFFF; }
+
+    .bottom-controls {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background-color: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 10px 14px 20px 14px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.08);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    .btn-action {
+      padding: 8px 6px;
+      border-radius: 10px;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 42px;
+    }
+
+    .btn-report { background-color: var(--purple); }
+    .btn-export { background-color: var(--green); }
+    .btn-manage { background-color: var(--accent); }
+    .btn-reset { background-color: #E5E5EA; color: var(--text-primary); }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-content {
+      background: white;
+      border-radius: 20px;
+      padding: 20px;
+      width: 100%;
+      max-width: 420px;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-title { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 14px; }
+
+    .field-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #666;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .select-class-full {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .class-manage-btns {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn-add-cls-btn {
+      flex: 1;
+      background-color: var(--green);
+      color: white;
+      border: none;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .btn-del-cls-btn {
+      flex: 1;
+      background-color: var(--red);
+      color: white;
+      border: none;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .inline-add-box {
+      display: none;
+      gap: 6px;
+      margin-bottom: 10px;
+      background: #F2F2F7;
+      padding: 8px;
+      border-radius: 10px;
+    }
+    .inline-add-box input { flex: 1; }
+    .btn-confirm-add { background: var(--accent); color: white; border: none; padding: 0 12px; border-radius: 8px; font-weight: 700; }
+
+    textarea {
+      width: 100%;
+      height: 220px;
+      border-radius: 12px;
+      border: 1px solid #D1D1D6;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.6;
+      margin-bottom: 16px;
+      resize: vertical;
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-modal-save {
+      flex: 1;
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .btn-modal-cancel {
+      flex: 1;
+      background-color: #8E8E93;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .confirm-modal-content {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      width: 100%;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+
+    .confirm-modal-title { font-size: 17px; font-weight: 800; margin-bottom: 8px; color: var(--text-primary); }
+    .confirm-modal-desc { font-size: 14px; color: #666; margin-bottom: 18px; line-height: 1.4; }
+    
+    .confirm-modal-actions { display: flex; gap: 8px; }
+    .btn-confirm-delete { flex: 1; background-color: var(--red); color: white; border: none; padding: 10px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+    .btn-confirm-cancel { flex: 1; background-color: var(--gray-btn); color: var(--text-primary); border: none; padding: 10px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+
+    .report-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    .report-table th, .report-table td { padding: 10px 6px; text-align: center; border-bottom: 1px solid #E5E5EA; font-size: 13px; }
+    .report-table th { color: var(--text-secondary); font-weight: 700; background: #F9F9FB; }
+    .report-table td.student-name-td { text-align: right; font-weight: 700; color: var(--text-primary); }
+    .badge-num { display: inline-block; width: 26px; height: 26px; line-height: 26px; border-radius: 50%; font-weight: 800; font-size: 12px; }
+    .badge-absent { background-color: #FFE5E5; color: var(--red); }
+    .badge-late { background-color: #FFF3D6; color: var(--yellow); }
+
+    .btn-close-circle {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: #E5E5EA; color: #8E8E93;
+      border: none; font-size: 16px; font-weight: bold;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">كشف الغياب والتأخر</div>
+    <div class="controls-bar">
+      <select id="classSelect" onchange="renderStudents()"></select>
+      <input type="date" id="dateSelect" onchange="renderStudents()">
+    </div>
+    <div class="stats-container">
+      <div class="stat-card absent">
+        <div class="stat-number" id="absentCount">0</div>
+        <div class="stat-label">غياب اليوم</div>
+      </div>
+      <div class="stat-card late">
+        <div class="stat-number" id="lateCount">0</div>
+        <div class="stat-label">تأخر اليوم</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="student-list" id="studentList"></main>
+
+  <div class="bottom-controls">
+    <button class="btn-action btn-report" onclick="openReportModal()">📈 التقرير الشامل</button>
+    <button class="btn-action btn-export" onclick="exportCSV()">📊 تصدير السجل (CSV)</button>
+    <button class="btn-action btn-reset" onclick="resetToday()">إعادة ضبط اليوم</button>
+    <button class="btn-action btn-manage" onclick="openManageModal()">⚙️ إدارة الأسماء والصفوف</button>
+  </div>
+
+  <div class="modal" id="manageModal">
+    <div class="modal-content">
+      <div class="modal-title">⚙️ إدارة الأسماء والصفوف</div>
+      
+      <span class="field-label">اختر الصف للتعديل:</span>
+      <select id="modalClassSelect" class="select-class-full" onchange="loadClassTextarea()"></select>
+
+      <div class="class-manage-btns">
+        <button type="button" class="btn-add-cls-btn" onclick="toggleAddClassBox()">➕ إضافة فصل</button>
+        <button type="button" class="btn-del-cls-btn" onclick="promptDeleteClass()">🗑️ حذف الفصل</button>
+      </div>
+
+      <div class="inline-add-box" id="inlineAddBox">
+        <input type="text" id="newClassInput" placeholder="اسم الفصل الجديد (مثال: أول/2)...">
+        <button class="btn-confirm-add" onclick="saveNewClass()">حفظ</button>
+      </div>
+
+      <span class="field-label">أسماء الطلاب (كل اسم في سطر):</span>
+      <textarea id="studentNamesTextarea" placeholder="أدخل أسماء الطلاب هنا، كل اسم في سطر منفصل..."></textarea>
+      
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeManageModal()">إلغاء</button>
+        <button class="btn-modal-save" onclick="saveStudentsFromTextarea()">حفظ الأسماء</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="confirmDeleteModal" style="z-index: 110;">
+    <div class="confirm-modal-content">
+      <div class="confirm-modal-title">تأكيد الحذف</div>
+      <div class="confirm-modal-desc" id="confirmDeleteText">هل أنت تأكد من حذف هذا الفصل؟</div>
+      <div class="confirm-modal-actions">
+        <button class="btn-confirm-cancel" onclick="closeConfirmModal()">إلغاء</button>
+        <button class="btn-confirm-delete" onclick="executeDeleteClass()">حذف نهائي</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="reportModal">
+    <div class="modal-content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="modal-title" id="reportModalTitle" style="margin:0;">📈 التقرير الشامل</div>
+        <button class="btn-close-circle" onclick="closeReportModal()">✕</button>
+      </div>
+      <div id="reportContent"></div>
+    </div>
+  </div>
+
+  <script>
+    let defaultData = {
+      "فصل 1/1": ["اسعد", "احمد"],
+      "فصل 1/2": ["عبدالملك", "عبدالله"]
+    };
+
+    let appData = JSON.parse(localStorage.getItem('attendance_app_data')) || defaultData;
+    let records = JSON.parse(localStorage.getItem('attendance_records')) || {};
+
+    document.getElementById('dateSelect').valueAsDate = new Date();
+
+    function saveData() {
+      localStorage.setItem('attendance_app_data', JSON.stringify(appData));
+      localStorage.setItem('attendance_records', JSON.stringify(records));
+    }
+
+    function initClassSelects() {
+      const classSelect = document.getElementById('classSelect');
+      const modalClassSelect = document.getElementById('modalClassSelect');
+      const selectedMain = classSelect.value;
+      const selectedModal = modalClassSelect.value;
+
+      classSelect.innerHTML = '';
+      modalClassSelect.innerHTML = '';
+      
+      const classKeys = Object.keys(appData);
+      classKeys.forEach(cls => {
+        classSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
+        modalClassSelect.innerHTML += `<option value="${cls}">${cls}</option>`;
+      });
+
+      if (classKeys.includes(selectedMain)) classSelect.value = selectedMain;
+      if (classKeys.includes(selectedModal)) modalClassSelect.value = selectedModal;
+    }
+
+    function renderStudents() {
+      const currentClass = document.getElementById('classSelect').value;
+      const currentDate = document.getElementById('dateSelect').value;
+      const listContainer = document.getElementById('studentList');
+      listContainer.innerHTML = '';
+
+      if (!currentClass || !appData[currentClass]) return;
+
+      const classStudents = appData[currentClass];
+      const todayRecord = (records[currentDate] && records[currentDate][currentClass]) ? records[currentDate][currentClass] : {};
+
+      let absentCount = 0;
+      let lateCount = 0;
+
+      classStudents.forEach(student => {
+        const status = todayRecord[student] || '';
+        if (status === 'غائب') absentCount++;
+        if (status === 'متأخر') lateCount++;
+
+        const card = document.createElement('div');
+        card.className = 'student-card';
+        card.innerHTML = `
+          <div class="student-name">${student}</div>
+          <div class="attendance-buttons">
+            <button class="btn-status ${status === 'غائب' ? 'active-absent' : ''}" onclick="setStatus('${student}', 'غائب')">غائب</button>
+            <button class="btn-status ${status === 'متأخر' ? 'active-late' : ''}" onclick="setStatus('${student}', 'متأخر')">متأخر</button>
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+
+      document.getElementById('absentCount').innerText = absentCount;
+      document.getElementById('lateCount').innerText = lateCount;
+    }
+
+    function setStatus(student, newStatus) {
+      const currentClass = document.getElementById('classSelect').value;
+      const currentDate = document.getElementById('dateSelect').value;
+
+      if (!records[currentDate]) records[currentDate] = {};
+      if (!records[currentDate][currentClass]) records[currentDate][currentClass] = {};
+
+      const currentStatus = records[currentDate][currentClass][student];
+      if (currentStatus === newStatus) {
+        delete records[currentDate][currentClass][student];
+      } else {
+        records[currentDate][currentClass][student] = newStatus;
+      }
+
+      saveData();
+      renderStudents();
+    }
+
+    function resetToday() {
+      const currentClass = document.getElementById('classSelect').value;
+      const currentDate = document.getElementById('dateSelect').value;
+      if (records[currentDate] && records[currentDate][currentClass]) {
+        delete records[currentDate][currentClass];
+        saveData();
+        renderStudents();
+      }
+    }
+
+    function openManageModal() {
+      document.getElementById('manageModal').style.display = 'flex';
+      initClassSelects();
+      
+      const currentMainClass = document.getElementById('classSelect').value;
+      if (currentMainClass) {
+        document.getElementById('modalClassSelect').value = currentMainClass;
+      }
+      loadClassTextarea();
+    }
+
+    function closeManageModal() {
+      document.getElementById('manageModal').style.display = 'none';
+      document.getElementById('inlineAddBox').style.display = 'none';
+    }
+
+    function loadClassTextarea() {
+      const selectedClass = document.getElementById('modalClassSelect').value;
+      if (selectedClass && appData[selectedClass]) {
+        document.getElementById('studentNamesTextarea').value = appData[selectedClass].join('\n');
+      } else {
+        document.getElementById('studentNamesTextarea').value = '';
+      }
+    }
+
+    function saveStudentsFromTextarea() {
+      const selectedClass = document.getElementById('modalClassSelect').value;
+      if (!selectedClass) return;
+
+      const rawText = document.getElementById('studentNamesTextarea').value;
+      const names = rawText.split('\n').map(name => name.trim()).filter(name => name !== '');
+
+      appData[selectedClass] = names;
+      saveData();
+      
+      document.getElementById('classSelect').value = selectedClass;
+      renderStudents();
+      closeManageModal();
+    }
+
+    function toggleAddClassBox() {
+      const box = document.getElementById('inlineAddBox');
+      if (box.style.display === 'flex') {
+        box.style.display = 'none';
+      } else {
+        box.style.display = 'flex';
+        document.getElementById('newClassInput').focus();
+      }
+    }
+
+    function saveNewClass() {
+      const input = document.getElementById('newClassInput');
+      const newName = input.value.trim();
+      if (!newName) return;
+
+      if (appData[newName]) {
+        alert("هذا الفصل موجود بالفعل!");
+        return;
+      }
+
+      appData[newName] = [];
+      saveData();
+      initClassSelects();
+      
+      document.getElementById('modalClassSelect').value = newName;
+      document.getElementById('classSelect').value = newName;
+      
+      input.value = '';
+      document.getElementById('inlineAddBox').style.display = 'none';
+      loadClassTextarea();
+      renderStudents();
+    }
+
+    let classToDelete = '';
+
+    function promptDeleteClass() {
+      const selectedClass = document.getElementById('modalClassSelect').value;
+      if (!selectedClass) return;
+
+      classToDelete = selectedClass;
+      document.getElementById('confirmDeleteText').innerText = `هل أنت تأكد من حذف "${selectedClass}" بالكامل وبشكل نهائي؟`;
+      document.getElementById('confirmDeleteModal').style.display = 'flex';
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirmDeleteModal').style.display = 'none';
+      classToDelete = '';
+    }
+
+    function executeDeleteClass() {
+      if (!classToDelete) return;
+
+      delete appData[classToDelete];
+      saveData();
+      initClassSelects();
+      loadClassTextarea();
+      renderStudents();
+      closeConfirmModal();
+    }
+
+    function openReportModal() {
+      const currentClass = document.getElementById('classSelect').value;
+      document.getElementById('reportModalTitle').innerText = `📈 التقرير الشامل - ${currentClass}`;
+      
+      const reportContainer = document.getElementById('reportContent');
+      if (!currentClass || !appData[currentClass]) {
+        reportContainer.innerHTML = '<div style="text-align:center; padding:10px;">لا يوجد فصل محدد</div>';
+        document.getElementById('reportModal').style.display = 'flex';
+        return;
+      }
+
+      const classStudents = appData[currentClass];
+      let studentStats = {};
+
+      classStudents.forEach(st => {
+        studentStats[st] = { absent: 0, late: 0 };
+      });
+
+      for (let date in records) {
+        if (records[date] && records[date][currentClass]) {
+          const dayData = records[date][currentClass];
+          for (let st in dayData) {
+            if (studentStats[st]) {
+              if (dayData[st] === 'غائب') studentStats[st].absent++;
+              if (dayData[st] === 'متأخر') studentStats[st].late++;
+            }
+          }
+        }
+      }
+
+      let html = `
+        <table class="report-table">
+          <thead>
+            <tr>
+              <th style="text-align:right;">اسم الطالب</th>
+              <th>الغياب</th>
+              <th>التأخر</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      classStudents.forEach(st => {
+        const abs = studentStats[st].absent;
+        const lat = studentStats[st].late;
+        html += `
+          <tr>
+            <td class="student-name-td">${st}</td>
+            <td><span class="badge-num badge-absent">${abs}</span></td>
+            <td><span class="badge-num badge-late">${lat}</span></td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+
+      reportContainer.innerHTML = html;
+      document.getElementById('reportModal').style.display = 'flex';
+    }
+
+    function closeReportModal() {
+      document.getElementById('reportModal').style.display = 'none';
+    }
+
+    async function exportCSV() {
+      let csv = "\uFEFFالتاريخ,الصف,اسم الطالب,الحالة\n";
+      for (let date in records) {
+        for (let cls in records[date]) {
+          for (let student in records[date][cls]) {
+            csv += `${date},${cls},${student},${records[date][cls][student]}\n`;
+          }
+        }
+      }
+
+      const currentDate = document.getElementById('dateSelect').value || 'سجل';
+      const fileName = `سجل_الغياب_${currentDate}.csv`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const file = new File([blob], fileName, { type: 'text/csv' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'تصدير سجل الغياب',
+            text: 'ملف سجل الغياب والتأخر CSV'
+          });
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    initClassSelects();
+    renderStudents();
+  </script>
+</body>
+</html>
