@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="كشف الغياب والتأخر">
+  <link rel="apple-touch-icon" href="icon.png">
   <title>كشف الغياب والتأخر</title>
   <style>
     :root {
@@ -111,12 +114,11 @@
       font-weight: 700;
       color: var(--text-primary);
       flex: 1;
-      word-break: break-word; /* سماح بالالتفاف في حال الأسماء الطويلة */
+      word-break: break-word;
     }
 
     .attendance-buttons { display: flex; gap: 4px; flex-shrink: 0; }
 
-    /* تم تصغير حجم الزرين */
     .btn-status {
       padding: 4px 8px;
       border-radius: 8px;
@@ -709,13 +711,13 @@
     initClassSelects();
     renderStudents();
   </script>
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js');
-    });
-  }
-</script>
 
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+  </script>
 </body>
 </html>
