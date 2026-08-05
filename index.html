@@ -710,6 +710,24 @@
 
     initClassSelects();
     renderStudents();
+
+    // حل مشكلة تغطية لوحة المفاتيح لحقول الإدخال
+    document.addEventListener('focusin', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) {
+        setTimeout(() => {
+          e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    });
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        const activeElement = document.activeElement;
+        if (activeElement && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeElement.tagName)) {
+          activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
   </script>
 
   <script>
