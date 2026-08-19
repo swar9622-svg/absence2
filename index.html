@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <!-- 🔢 رقم إصدار التطبيق — غيّر الرقم هنا فقط ليتحدث تلقائياً في كل الشاشات -->
-  <script>const APP_VERSION = "14.5";</script>
+  <script>const APP_VERSION = "14.6";</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1444,14 +1444,25 @@
     function renderAttendanceUnitsDropdown(){
       const sel=document.getElementById('attendanceUnitSelect');
       if(!sel) return;
+
+      // في الحساب التراكمي لا توجد وحدة نشطة، فيظهر اختيار واضح وغير قابل للتغيير.
+      if(!isPerUnitParticipationMode()){
+        sel.innerHTML='<option value="__cumulative__">تراكمي</option>';
+        sel.value='__cumulative__';
+        sel.disabled=true;
+        sel.title='المشاركة التراكمية: تُحتسب جميع الوحدات معاً';
+        sel.style.opacity='0.72';
+        return;
+      }
+
       const units=Object.keys(unitsData);
       if(!units.includes(currentAttendanceUnit)) currentAttendanceUnit=units[0]||'';
       sel.innerHTML='';
       units.forEach(u=>{ sel.innerHTML+=`<option value="${u}">${u}</option>`; });
       if(currentAttendanceUnit) sel.value=currentAttendanceUnit;
-      sel.disabled=!isPerUnitParticipationMode();
-      sel.title=isPerUnitParticipationMode()?'اختر وحدة تسجيل الغياب والتأخر والمخالفات':'يتاح اختيار الوحدة عند تفعيل طريقة «المشاركة 10 لكل وحدة»';
-      sel.style.opacity=isPerUnitParticipationMode()?'1':'0.72';
+      sel.disabled=false;
+      sel.title='اختر وحدة تسجيل الغياب والتأخر والمخالفات';
+      sel.style.opacity='1';
     }
     function onAttendanceUnitChange(unit){
       if(!unit) return;
