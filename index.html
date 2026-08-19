@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <!-- 🔢 رقم إصدار التطبيق — غيّر الرقم هنا فقط ليتحدث تلقائياً في كل الشاشات -->
-  <script>const APP_VERSION = "14.0";</script>
+  <script>const APP_VERSION = "13.2";</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2926,14 +2926,22 @@
         });
         main+='</tr></table>';
 
-        const participationRows=selected.map(u=>{
-          const stats=getStudentAttendanceStats(cls,s,isPerUnitParticipationMode()?u:'__all__');
-          const score=calculateStudentParticipationScore(cls,s,u);
-          return {unit:u,...stats,score};
-        });
-        let partHtml=`<table style="width:100%;border-collapse:collapse;font-size:${tableSize-1}px;"><thead><tr><th style="border:1px solid #ccc;padding:2px;text-align:center;background:#D6EAF8;font-weight:bold;">الوحدة</th><th style="border:1px solid #ccc;padding:2px;text-align:center;background:#FADBD8;font-weight:bold;">الغياب</th><th style="border:1px solid #ccc;padding:2px;text-align:center;background:#FCF3CF;font-weight:bold;">التأخر</th><th style="border:1px solid #ccc;padding:2px;text-align:center;background:#EBDEF0;font-weight:bold;">المخالفات</th><th style="border:1px solid #ccc;padding:2px;text-align:center;background:#D4EFDF;font-weight:bold;">المشاركة</th></tr></thead><tbody>`;
-        participationRows.forEach(row=>{ partHtml+=`<tr><td style="border:1px solid #ccc;padding:2px;text-align:center;font-weight:bold;background:${getColor(row.unit)};">${row.unit}</td><td style="border:1px solid #ccc;padding:2px;text-align:center;font-weight:bold;color:#C0392B;">${row.absent}</td><td style="border:1px solid #ccc;padding:2px;text-align:center;font-weight:bold;color:#F39C12;">${row.late}</td><td style="border:1px solid #ccc;padding:2px;text-align:center;font-weight:bold;color:#8E44AD;">${row.violations}</td><td style="border:1px solid #ccc;padding:2px;text-align:center;font-weight:bold;color:#1E8449;background:#D4EFDF;">${row.score.toFixed(2)}</td></tr>`; });
-        partHtml+='</tbody></table>';
+        // جدول المشاركة بعرض كامل. تظهر الوحدات فقط في نمط «10 لكل وحدة».
+        let partHtml='';
+        if(isPerUnitParticipationMode()){
+          const participationRows=selected.map(u=>{
+            const stats=getStudentAttendanceStats(cls,s,u);
+            const score=calculateStudentParticipationScore(cls,s,u);
+            return {unit:u,...stats,score};
+          });
+          partHtml=`<div style="width:100%;border:2px solid #5B2C6F;border-radius:5px;overflow:hidden;"><div style="background:#5B2C6F;color:#fff;text-align:center;padding:3px;font-weight:900;font-size:${tableSize}px;">درجات المشاركة حسب الوحدات</div><table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:${tableSize}px;direction:rtl;"><thead><tr><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#D6EAF8;font-weight:bold;white-space:nowrap;">الوحدة</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#FADBD8;font-weight:bold;white-space:nowrap;">الغياب</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#FCF3CF;font-weight:bold;white-space:nowrap;">التأخر</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#EBDEF0;font-weight:bold;white-space:nowrap;">المخالفات</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#D4EFDF;font-weight:bold;white-space:nowrap;">المشاركة</th></tr></thead><tbody>`;
+          participationRows.forEach(row=>{ partHtml+=`<tr><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;background:${getColor(row.unit)};white-space:nowrap;">${row.unit}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#C0392B;">${row.absent}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#F39C12;">${row.late}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#8E44AD;">${row.violations}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#1E8449;background:#D4EFDF;">${row.score.toFixed(2)}</td></tr>`; });
+          partHtml+='</tbody></table></div>';
+        } else {
+          const cumulativeStats=getStudentAttendanceStats(cls,s,'__all__');
+          const cumulativeScore=calculateStudentParticipationScore(cls,s,null);
+          partHtml=`<div style="width:100%;border:2px solid #5B2C6F;border-radius:5px;overflow:hidden;"><div style="background:#5B2C6F;color:#fff;text-align:center;padding:3px;font-weight:900;font-size:${tableSize}px;">المشاركة التراكمية</div><table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:${tableSize}px;direction:rtl;"><thead><tr><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#FADBD8;font-weight:bold;white-space:nowrap;">الغياب</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#FCF3CF;font-weight:bold;white-space:nowrap;">التأخر</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#EBDEF0;font-weight:bold;white-space:nowrap;">المخالفات</th><th style="border:1px solid #ccc;padding:3px;text-align:center;background:#D4EFDF;font-weight:bold;white-space:nowrap;">درجة المشاركة</th></tr></thead><tbody><tr><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#C0392B;">${cumulativeStats.absent}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#F39C12;">${cumulativeStats.late}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#8E44AD;">${cumulativeStats.violations}</td><td style="border:1px solid #ccc;padding:3px;text-align:center;font-weight:bold;color:#1E8449;background:#D4EFDF;">${cumulativeScore.toFixed(2)}</td></tr></tbody></table></div>`;
+        }
 
         let tests='';
         if(unitData.length>0){
@@ -2946,7 +2954,8 @@
           tests+=`</tr></table>`;
         } else tests=`<div style="text-align:center;font-size:${textSize}px;color:#999;">لا توجد وحدات</div>`;
 
-        let comb=`<div style="display:flex;flex-wrap:nowrap;gap:6px;margin-top:2px;align-items:stretch;"><div style="flex:0 0 25%;min-width:80px;">${partHtml}</div><div style="flex:1;">${tests}</div></div>`;
+        // يوضع الجدولان أسفل بعضهما بعرض الصفحة، مع فاصل واضح يمنع ضيق الأعمدة عند زيادة حجم الخط.
+        let comb=`<div style="width:100%;margin-top:4px;"><div style="width:100%;">${partHtml}</div><div style="height:0;border-top:2px dashed #007AFF;margin:8px 2px 7px;"></div><div style="width:100%;border:2px solid #1B4F72;border-radius:5px;overflow:hidden;"><div style="background:#1B4F72;color:#fff;text-align:center;padding:3px;font-weight:900;font-size:${tableSize}px;">الاختبارات والمشاريع حسب الوحدات</div>${tests}</div></div>`;
 
         let wHtml=`<table style="width:100%;border-collapse:collapse;margin-top:2px;font-size:${tableSize}px;border:2px solid #1E8449;"><tr style="background:#1E8449;color:white;"><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;">الموزونة + المشاريع</th><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;">الواجبات</th><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;">الأنشطة</th><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;">المشاركة</th><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;">الاختبارات</th><th style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;background:#27AE60;">المجموع</th></tr><tr><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;background:#E8F8F5;font-size:${textSize-1}px;">القيمة</td><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;font-size:${textSize}px;">${fHw.toFixed(2)}</td><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;font-size:${textSize}px;">${fAct.toFixed(2)}</td><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;font-size:${textSize}px;background:#F5EEF8;">${part.toFixed(2)}</td><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;font-size:${textSize}px;">${fTest.toFixed(2)}</td><td style="border:1px solid #1E8449;padding:2px;text-align:center;font-weight:bold;font-size:${textSize+2}px;background:#D5F5E3;color:#1E8449;">${wScore.toFixed(2)}</td></tr><tr><td style="border:1px solid #1E8449;padding:1px;text-align:center;font-size:${textSize-3}px;color:#666;" colspan="6">(مجموع الوحدات المختارة: ${valid})</td></tr></table>`;
 
