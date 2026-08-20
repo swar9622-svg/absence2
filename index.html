@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <!-- 🔢 رقم إصدار التطبيق — غيّر الرقم هنا فقط ليتحدث تلقائياً في كل الشاشات -->
-  <script>const APP_VERSION = "14.6";</script>
+  <script>const APP_VERSION = "15.0";</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -437,7 +437,7 @@
         <select id="studentReportUnitSelect" class="select-class-full" onchange="onStudentReportUnitChange(this.value)" style="margin:0;"></select>
       </div>
       <div class="table-responsive-wrapper" style="max-height:45vh;overflow-y:auto;margin-bottom:12px;">
-        <table class="report-table" id="studentReportDetailTable" style="width:100%;"><thead><tr><th>الوحدة</th><th>التاريخ</th><th>الغياب</th><th>التأخر</th><th>عدد المخالفات</th></tr></thead><tbody id="studentReportDetailTableBody"></tbody></table>
+        <table class="report-table" id="studentReportDetailTable" style="width:100%;"><thead><tr><th>التاريخ</th><th>الوحدة</th><th>الغياب</th><th>التأخر</th><th>عدد المخالفات</th></tr></thead><tbody id="studentReportDetailTableBody"></tbody></table>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         <button class="btn-export-period" id="btnExportSingleStudentPDF" onclick="openPdfSizeModal('singleStudent')" style="background-color:var(--accent);margin-bottom:0;">📄 تصدير PDF</button>
@@ -2318,6 +2318,30 @@
     function openStudentReportSelectModal(){ const cls=document.getElementById('classSelect').value; if(!cls||!appData[cls]||appData[cls].length===0){ alert("يرجى اختيار فصل يحتوي على طلاب أولاً!"); return; } const students=[...appData[cls]].sort((a,b)=>a.localeCompare(b,'ar')), dup=getDuplicateNames(); const tbody=document.getElementById('studentReportSelectTableBody'); tbody.innerHTML=''; students.forEach((s,i)=>{ const color=dup.includes(s)?'color:#FF3B30;':''; tbody.innerHTML+=`<tr onclick="selectStudentForReportAction('${CSS.escape(s)}')" style="cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='#F2F2F7'" onmouseout="this.style.background='transparent'"><td style="color:var(--text-secondary);font-weight:bold;">${i+1}</td><td class="student-name-td" style="font-size:15px;font-weight:900;padding:10px 8px;white-space:normal;word-break:break-word;${color}">${s}</td></tr>`; }); document.getElementById('studentReportSelectModal').style.display='flex'; }
     function closeStudentReportSelectModal(){ document.getElementById('studentReportSelectModal').style.display='none'; }
     function selectStudentForReportAction(name){ selectedStudentForReport=name; closeStudentReportSelectModal(); openStudentReportDetailModal(); }
+    // يجمع صفوف تقرير الطالب. عند اختيار جميع الوحدات في نمط 10 لكل وحدة
+    // يدمج السجل المتطابق في اليوم نفسه للعرض فقط، من دون تعديل بيانات الوحدة أو الحساب.
+    function buildStudentReportRows(cls, student, scope='__all__'){
+      const rows=[];
+      Object.keys(records).sort().forEach(date=>{
+        const components=getAttendanceRecordComponents(date,cls,student,scope).filter(({record})=>{
+          const vio=record.violations?record.violations.length:0;
+          return record.status==='غائب'||record.status==='متأخر'||vio>0;
+        });
+        if(scope==='__all__'&&isPerUnitParticipationMode()){
+          const grouped=new Map();
+          components.forEach(({record})=>{
+            const violations=(record.violations||[]).slice().sort();
+            const signature=`${record.status||''}::${violations.join('||')}`;
+            if(!grouped.has(signature)) grouped.set(signature,{date,unit:'جميع الوحدات',record:{status:record.status||'',violations}});
+          });
+          grouped.forEach(item=>rows.push(item));
+        } else {
+          components.forEach(({unit,record})=>rows.push({date,unit,record}));
+        }
+      });
+      return rows;
+    }
+
     function openStudentReportDetailModal(){
       const cls=document.getElementById('classSelect').value;
       const sel=document.getElementById('studentReportUnitSelect');
@@ -2328,16 +2352,15 @@
       sel.value=currentStudentReportUnitSelection;
       document.getElementById('studentReportStudentNameHeader').innerHTML=`الطالب: ${selectedStudentForReport}<br><span style="font-size:12px;font-weight:700;color:var(--text-secondary);">الفصل: ${cls} — ${getAttendanceScopeLabel(currentStudentReportUnitSelection)}</span>`;
       const tbody=document.getElementById('studentReportDetailTableBody'); tbody.innerHTML='';
-      const dates=Object.keys(records).sort(); let has=false;
-      dates.forEach(d=>{
-        getAttendanceRecordComponents(d,cls,selectedStudentForReport,currentStudentReportUnitSelection).forEach(({unit,record})=>{
-          const isAbs=record.status==='غائب', isLate=record.status==='متأخر', vio=record.violations?record.violations.length:0;
-          if(isAbs||isLate||vio>0){ has=true; tbody.innerHTML+=`<tr><td style="font-weight:800;color:var(--accent);">${unit}</td><td style="font-weight:700;">${d}</td><td>${isAbs?'<span style="color:var(--red);font-weight:900;">غائب</span>':'-'}</td><td>${isLate?'<span style="color:var(--yellow);font-weight:900;">متأخر</span>':'-'}</td><td>${vio>0?`<span class="badge-num badge-violation">${vio}</span>`:'-'}</td></tr>`; }
-        });
+      const reportRows=buildStudentReportRows(cls,selectedStudentForReport,currentStudentReportUnitSelection);
+      reportRows.forEach(({date,unit,record})=>{
+        const isAbs=record.status==='غائب', isLate=record.status==='متأخر', vio=record.violations?record.violations.length:0;
+        tbody.innerHTML+=`<tr><td style="font-weight:700;">${date}</td><td style="font-weight:800;color:var(--accent);">${unit}</td><td>${isAbs?'<span style="color:var(--red);font-weight:900;">غائب</span>':'-'}</td><td>${isLate?'<span style="color:var(--yellow);font-weight:900;">متأخر</span>':'-'}</td><td>${vio>0?`<span class="badge-num badge-violation">${vio}</span>`:'-'}</td></tr>`;
       });
-      if(!has) tbody.innerHTML='<tr><td colspan="5" style="padding:15px;color:var(--text-secondary);">لا توجد أي حالات مسجلة لهذا الطالب ضمن الوحدة المحددة.</td></tr>';
+      if(reportRows.length===0) tbody.innerHTML='<tr><td colspan="5" style="padding:15px;color:var(--text-secondary);">لا توجد أي حالات مسجلة لهذا الطالب ضمن الوحدة المحددة.</td></tr>';
       document.getElementById('studentReportDetailModal').style.display='flex';
     }
+
     function onStudentReportUnitChange(unit){ currentStudentReportUnitSelection=unit; openStudentReportDetailModal(); }
 
     function closeStudentReportDetailModal(){ document.getElementById('studentReportDetailModal').style.display='none'; }
@@ -2969,35 +2992,56 @@
         const wObj=computeWeightedScores(cls,s,selected);
         let fHw=wObj.hw, fAct=wObj.act, fTest=wObj.test, wScore=wObj.total, part=wObj.participation;
         let rawPart=calculateStudentParticipationScore(cls,s); // درجة المشاركة الخام بدون إضافة نصيب المشروع (للجدول الصغير فقط)
-        let allRows=[];
-        unitData.forEach(u=>{
-          u.lessons.forEach((l,i)=>{ allRows.push({unit:u.name,lesson:l,hw:u.hw[l]!==undefined?u.hw[l]:'',act:u.act[l]!==undefined?u.act[l]:'',isFirst:i===0}); });
-          allRows.push({isMoazana:true,unit:u.name,mozHw:u.mozHw,mozAct:u.mozAct});
+        // الجدول العلوي: بطاقة مستقلة لكل وحدة، بلا عمود «الوحدة» داخل الصفوف.
+        // كل بطاقة تضم رأس الوحدة ثم أعمدة أفقية (درس / واجب / نشاط) وقيمها.
+        const upperUnitThemes=[
+          {title:'#1F6F4A',header:'#D7EEDD',body:'#F8FCF9',border:'#5BA875'},
+          {title:'#B86735',header:'#F8E0CC',body:'#FFF9F4',border:'#D68C56'},
+          {title:'#6250B5',header:'#E4DDF7',body:'#FAF9FF',border:'#8D7CD3'},
+          {title:'#176B87',header:'#D5ECF4',body:'#F7FCFE',border:'#519CB6'},
+          {title:'#9A3F63',header:'#F5DCE7',body:'#FFF8FB',border:'#C66E91'},
+          {title:'#7B6A21',header:'#F3EDC9',body:'#FFFDF3',border:'#B6A34A'}
+        ];
+        const getUpperTheme=unit=>upperUnitThemes[Math.max(0,selected.indexOf(unit))%upperUnitThemes.length];
+        const unitBlocks=unitData.map(unit=>{
+          const theme=getUpperTheme(unit.name);
+          const lessonRows=Math.max(1,Math.ceil(unit.lessons.length/2));
+          // العنوان + عناوين الأعمدة + صفوف الدروس + صف الموزونات.
+          return {...unit,theme,requiredRows:lessonRows+3};
         });
-        let cols=[]; for(let i=0;i<allRows.length;i+=rows) cols.push(allRows.slice(i,i+rows)); if(cols.length===0) cols.push([]);
-        let main='<table style="width:100%;border-collapse:collapse;direction:rtl;margin-bottom:4px;font-size:inherit;"><tr>';
-        cols.forEach(col=>{
-          main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:2px;border:1px solid #007AFF;border-radius:4px;"><table style="width:100%;border-collapse:collapse;font-size:${upperTableSize}px;direction:rtl;"><thead><tr style="background:#007AFF;color:white;"><th style="border:1px solid #007AFF;padding:2px;text-align:center;font-size:${upperTableSize-1}px;width:25%;">الوحدة</th><th style="border:1px solid #007AFF;padding:2px;text-align:center;font-size:${upperTableSize-1}px;width:30%;">الدرس</th><th style="border:1px solid #007AFF;padding:2px;text-align:center;font-size:${upperTableSize-1}px;width:20%;">الواجب</th><th style="border:1px solid #007AFF;padding:2px;text-align:center;font-size:${upperTableSize-1}px;width:25%;">النشاط</th></tr></thead><tbody>`;
-          if(col.length===0){
-            for(let i=0;i<rows;i++) main+=`<tr><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td></tr>`;
-          } else {
-            let curUnit='';
-            col.forEach((row,i)=>{
-              if(row.isMoazana){
-                const dbg=getDarkColor(row.unit);
-                main+=`<tr style="background:${dbg};"><td colspan="2" style="border:1px solid #ddd;padding:1px;text-align:center;font-weight:bold;font-size:${upperTableSize-1}px;color:#fff;">موزونة ${row.unit}</td><td style="border:1px solid #ddd;padding:1px;text-align:center;font-weight:bold;font-size:${upperTableSize-1}px;color:#fff;">${(row.mozHw||0).toFixed(2)}</td><td style="border:1px solid #ddd;padding:1px;text-align:center;font-weight:bold;font-size:${upperTableSize-1}px;color:#fff;">${(row.mozAct||0).toFixed(2)}</td></tr>`;
-                curUnit='';
-                return;
-              }
-              curUnit=row.unit;
-              const bg=getColor(row.unit);
-              const display=row.isFirst?row.unit:'';
-              main+=`<tr style="background:${bg};"><td style="border:1px solid #ddd;padding:1px;text-align:center;font-weight:bold;font-size:${upperTableSize-1}px;">${display}</td><td style="border:1px solid #ddd;padding:1px;text-align:center;font-size:${upperTableSize-1}px;">${row.lesson}</td><td style="border:1px solid #ddd;padding:1px;text-align:center;font-size:${upperTableSize-1}px;">${row.hw}</td><td style="border:1px solid #ddd;padding:1px;text-align:center;font-size:${upperTableSize-1}px;">${row.act}</td></tr>`;
-            });
-            const rem=rows-col.length;
-            for(let i=0;i<rem;i++) main+=`<tr><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td><td style="border:1px solid #ddd;padding:1px;text-align:center;">&nbsp;</td></tr>`;
+        const cols=[];
+        let currentCol=[], usedRows=0;
+        unitBlocks.forEach(block=>{
+          // إذا لم تكف المساحة لرأس الوحدة وبطاقتها، يظل المتبقي فارغاً وتبدأ البطاقة في العمود التالي.
+          if(currentCol.length>0 && usedRows+block.requiredRows>rows){
+            cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
+            currentCol=[]; usedRows=0;
           }
-          main+='</tbody></table></td>';
+          currentCol.push(block);
+          usedRows+=block.requiredRows;
+        });
+        if(currentCol.length>0) cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
+        if(cols.length===0) cols.push({blocks:[],blankRows:rows});
+
+        let main='<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;"><tr>';
+        cols.forEach(col=>{
+          main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;">`;
+          col.blocks.forEach(block=>{
+            const {name,lessons,hw,act,mozHw,mozAct,theme}=block;
+            main+=`<table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid ${theme.border};border-radius:8px;margin-bottom:3px;font-size:${upperTableSize}px;direction:rtl;background:${theme.body};"><thead><tr><th colspan="6" style="padding:3px 2px;text-align:center;background:${theme.title};color:#fff;font-weight:900;font-size:${Math.max(upperTableSize,5)}px;letter-spacing:.1px;">${name}</th></tr><tr style="background:${theme.header};color:${theme.title};"><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">نشاط</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">نشاط</th></tr></thead><tbody>`;
+            for(let lessonIndex=0;lessonIndex<Math.max(lessons.length,1);lessonIndex+=2){
+              const first=lessons[lessonIndex]||'', second=lessons[lessonIndex+1]||'';
+              const firstHw=first!==''&&hw[first]!==undefined?hw[first]:'';
+              const firstAct=first!==''&&act[first]!==undefined?act[first]:'';
+              const secondHw=second!==''&&hw[second]!==undefined?hw[second]:'';
+              const secondAct=second!==''&&act[second]!==undefined?act[second]:'';
+              main+=`<tr style="background:${theme.body};"><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:700;">${first||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${firstHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${firstAct||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:700;">${second||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${secondHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${secondAct||'&nbsp;'}</td></tr>`;
+            }
+            main+=`<tr style="background:${theme.header};"><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;font-weight:900;color:${theme.title};">موزونة الواجبات: ${(mozHw||0).toFixed(2)}</td><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;font-weight:900;color:${theme.title};">موزونة الأنشطة: ${(mozAct||0).toFixed(2)}</td></tr></tbody></table>`;
+          });
+          // المساحة المتبقية فارغة عند نقل رأس الوحدة التالية إلى العمود التالي.
+          if(col.blankRows>0) main+=`<div style="height:${Math.max(3,col.blankRows*(upperTableSize+5))}px;"></div>`;
+          main+='</td>';
         });
         main+='</tr></table>';
 
@@ -3085,125 +3129,167 @@
     function showDuplicateNumbersModal(dups,map){ const cont=document.getElementById('duplicateNumbersContainer'); cont.innerHTML=''; let html=''; for(let num in dups){ const students=dups[num]; html+=`<div style="background:#f8d7da;padding:4px 8px;border-radius:6px;margin-bottom:6px;border:1px solid #f5c6cb;"><div style="font-weight:bold;color:#721c24;">الرقم المكرر: ${num}</div>`; students.forEach(s=>{ html+=`<div style="display:flex;align-items:center;gap:4px;margin:2px 0;"><span style="flex:1;font-weight:700;">${s}</span><input type="text" class="duplicate-number-input" data-student="${s}" value="${num}" style="width:80px;text-align:center;border:1px solid #ccc;border-radius:4px;padding:2px;"></div>`; }); html+=`</div>`; } cont.innerHTML=html; document.getElementById('duplicateNumbersModal').style.display='flex'; window._tempNumberMap=map; window._duplicates=dups; }
     function closeDuplicateNumbersModal(){ document.getElementById('duplicateNumbersModal').style.display='none'; window._tempNumberMap=null; window._duplicates=null; }
     function saveDuplicateNumbersAndExport(){ const inputs=document.querySelectorAll('.duplicate-number-input'), newMap={}; const checkboxes=document.querySelectorAll('#queryUnitCheckboxes input[type="checkbox"]'), selected=[]; checkboxes.forEach(cb=>{ if(cb.checked) selected.push(cb.value); }); inputs.forEach(inp=>{ const s=inp.dataset.student, val=inp.value.trim(); if(!val||val.length<5){ alert(`الرقم "${val}" غير صحيح للطالب ${s}. يجب أن يحتوي على 5 أرقام.`); return; } newMap[s]=val.slice(-5); queryStudentNumberMap[s]=val.slice(-5); }); const count={}; for(let s in newMap){ const num=newMap[s]; if(!count[num]) count[num]=[]; count[num].push(s); } for(let num in count){ if(count[num].length>1){ alert(`لا يزال هناك تكرار للرقم "${num}" بين الطلاب: ${count[num].join(', ')}. يرجى تعديله.`); return; } } saveStudentNumberMap(); closeDuplicateNumbersModal(); const filter=document.getElementById('queryClassSelect').value, allClasses=Object.keys(appData); let targets=(filter==='الكل')?allClasses:[filter]; let list=[]; targets.forEach(cls=>{ if(appData[cls]) appData[cls].forEach(s=>list.push({name:s,class:cls})); }); list.sort((a,b)=>a.name.localeCompare(b.name,'ar')); performQueryExport(targets,selected,newMap,list); }
+    // ===== تصدير بيانات الاستعلام (data.xlsx) =====
+    // صفحات الوحدات تنقل لقطة القيم المعروضة في كشف المتابعة، والخلاصة فقط تجمع هذه اللقطات وتقسمها على عدد الوحدات.
+    // ===== تصدير بيانات الاستعلام (data.xlsx) =====
+    // صفحات الوحدات تقرأ الخلايا الظاهرة في كشف المتابعة مباشرة؛ الخلاصة فقط تحسب متوسط القيم المصدرة.
     function performQueryExport(targets, selectedUnits, map, list) {
       const wb = XLSX.utils.book_new();
+      const unitSnapshots = {};
+      const classSelect = document.getElementById('followupClassSelect');
+      const savedClass = classSelect ? classSelect.value : '';
+      const savedActiveUnit = currentActiveUnit;
+      const renderedScopes = new Set();
+      const asNumber = value => Number.parseFloat(String(value).replace(/,/g,'')) || 0;
+      const cellText = cell => cell ? cell.textContent.trim() : '';
+      const inputValue = cell => {
+        const input = cell ? cell.querySelector('input') : null;
+        return input ? input.value : '';
+      };
 
-      // لكل وحدة مختارة، إنشاء ورقة
-      selectedUnits.forEach((unit, idx) => {
-        const unitObj = unitsData[unit] || {lessons: ["درس 1"]};
-        const lessons = unitObj.lessons;
-        const rows = [];
-        // رأس الأعمدة
-        const header = ['رقم', 'الاسم', 'الفصل'];
-        lessons.forEach(l => header.push(`واجب ${l}`));
-        header.push('الموزونه');
-        lessons.forEach(l => header.push(`نشاط ${l}`));
-        header.push('الموزونه');
-        header.push('غياب', 'تأخر', 'مخالفات', 'المشاركه', 'اختبار', 'مشروع');
-        header.push('خ واجب', 'خ نشاط', 'خ مشاركه', 'خ اختبار', 'المجموع');
-        rows.push(header);
+      // يبني لقطة للصف من خلايا كشف المتابعة؛ لا تستدعي هذه الدالة أي حساب درجات.
+      function readVisibleFollowupRow(cls, student, unit, lessons) {
+        const scope = `${cls}__${unit}`;
+        if(!renderedScopes.has(scope)){
+          if(classSelect) classSelect.value=cls;
+          renderFollowupTable(unit);
+          renderedScopes.add(scope);
+        }
+        const rows = Array.from(document.querySelectorAll('#followupTableBody tr'));
+        const row = rows.find(tr => cellText(tr.cells[1]) === student);
+        if(!row) throw new Error(`تعذر العثور على صف الطالب ${student} في كشف ${unit}`);
 
-        list.forEach(item => {
-          const s = item.name, cls = item.class;
-          const key = `${cls}_${unit}`;
-          const fData = followupData[key] || {};
-          const st = fData[s] || {hw:{}, act:{}, test1:'', test2:'', projectLink:''};
-          const raw = computeRawAverages(cls, s, unit);
-          const hwAvg = raw.hwAvg;
-          const actAvg = raw.actAvg;
-          const w = computeWeightedScores(cls, s, [unit]);
+        const lessonCount = lessons.length;
+        const hwStart = 2;
+        const hwAverage = hwStart + lessonCount;
+        const actStart = hwAverage + 1;
+        const actAverage = actStart + lessonCount;
+        const participation = actAverage + 1;
+        const test = participation + 1;
+        const project = participation + 2;
+        const finalHw = participation + 3;
+        const finalAct = participation + 4;
+        const finalParticipation = participation + 5;
+        const finalTest = participation + 6;
+        const total = participation + 7;
 
-          // إحصائيات الغياب والتأخر والمخالفات للوحدة في نمط «10 لكل وحدة».
-          const attendanceStats=getStudentAttendanceStats(cls,s,isPerUnitParticipationMode()?unit:'__all__');
-          const abs=attendanceStats.absent, late=attendanceStats.late, vio=attendanceStats.violations;
+        const attendance = getStudentAttendanceStats(cls, student, isPerUnitParticipationMode() ? unit : '__all__');
+        return {
+          hwInputs: lessons.map((_, index) => inputValue(row.cells[hwStart + index])),
+          hwAverage: cellText(row.cells[hwAverage]),
+          actInputs: lessons.map((_, index) => inputValue(row.cells[actStart + index])),
+          actAverage: cellText(row.cells[actAverage]),
+          absence: attendance.absent,
+          late: attendance.late,
+          violations: attendance.violations,
+          participation: cellText(row.cells[participation]),
+          test: inputValue(row.cells[test]),
+          project: inputValue(row.cells[project]),
+          finalHw: cellText(row.cells[finalHw]),
+          finalAct: cellText(row.cells[finalAct]),
+          finalParticipation: cellText(row.cells[finalParticipation]),
+          finalTest: cellText(row.cells[finalTest]),
+          total: cellText(row.cells[total])
+        };
+      }
 
-          const row = [];
-          row.push(map[s] || '');
-          row.push(s);
-          row.push(cls);
-          lessons.forEach(l => row.push(st.hw[l] !== undefined ? st.hw[l] : ''));
-          row.push(hwAvg.toFixed(2));
-          lessons.forEach(l => row.push(st.act[l] !== undefined ? st.act[l] : ''));
-          row.push(actAvg.toFixed(2));
-          row.push(abs);
-          row.push(late);
-          row.push(vio);
-          const part = calculateStudentParticipationScore(cls, s, unit);
-          row.push(part.toFixed(2));
-          row.push(st.test1 !== undefined ? st.test1 : '');
-          row.push(st.test2 !== undefined ? st.test2 : '');
-          row.push(w.hw.toFixed(2));
-          row.push(w.act.toFixed(2));
-          row.push(w.participation.toFixed(2));
-          row.push(w.test.toFixed(2));
-          row.push(w.total.toFixed(2));
-          rows.push(row);
-        });
-
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        XLSX.utils.book_append_sheet(wb, ws, unit);
-      });
-
-      // صفحة الخلاصة (المتوسطات لكل الطلاب عبر الوحدات المختارة)
-      const summaryHeader = ['رقم', 'اسم الطالب', 'الفصل', 'واجب', 'نشاط', 'مشاركه', 'اختبار', 'المجموع'];
-      const summaryRows = [summaryHeader];
-      list.forEach(item => {
-        const s = item.name, cls = item.class;
-        let sumHw=0, sumAct=0, sumPart=0, sumTest=0, sumTotal=0;
+      try {
         selectedUnits.forEach(unit => {
-          const w = computeWeightedScores(cls, s, [unit]);
-          sumHw += w.hw;
-          sumAct += w.act;
-          sumPart += w.participation;
-          sumTest += w.test;
-          sumTotal += w.total;
-        });
-        const n = selectedUnits.length || 1;
-        summaryRows.push([
-          map[s] || '',
-          s,
-          cls,
-          (sumHw/n).toFixed(2),
-          (sumAct/n).toFixed(2),
-          (sumPart/n).toFixed(2),
-          (sumTest/n).toFixed(2),
-          (sumTotal/n).toFixed(2)
-        ]);
-      });
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'خلاصة');
+          const unitObj = unitsData[unit] || {lessons: ['درس 1']};
+          const lessons = unitObj.lessons;
+          const rows = [];
+          const header = ['رقم', 'الاسم', 'الفصل'];
+          lessons.forEach(l => header.push(`واجب ${l}`));
+          header.push('الموزونه');
+          lessons.forEach(l => header.push(`نشاط ${l}`));
+          header.push('الموزونه');
+          header.push('غياب', 'تأخر', 'مخالفات', 'المشاركه', 'اختبار', 'مشروع');
+          header.push('خ واجب', 'خ نشاط', 'خ مشاركه', 'خ اختبار', 'المجموع');
+          rows.push(header);
+          unitSnapshots[unit] = {};
 
-      // حفظ الملف
-      const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-      const blob = new Blob([out], {type:'application/octet-stream'});
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'data.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-      alert(`✅ تم تصدير data.xlsx بنجاح! (${selectedUnits.length} وحدة + صفحة خلاصة)`);
-      closeQueryExportModal();
+          list.forEach(item => {
+            const snapshot = readVisibleFollowupRow(item.class, item.name, unit, lessons);
+            unitSnapshots[unit][`${item.class}__${item.name}`] = snapshot;
+            // صف الوحدة: نقل حرفي لقيم كشف المتابعة ولا توجد دوال حساب درجات هنا.
+            rows.push([
+              map[item.name] || '', item.name, item.class,
+              ...snapshot.hwInputs, snapshot.hwAverage,
+              ...snapshot.actInputs, snapshot.actAverage,
+              snapshot.absence, snapshot.late, snapshot.violations, snapshot.participation,
+              snapshot.test, snapshot.project,
+              snapshot.finalHw, snapshot.finalAct, snapshot.finalParticipation, snapshot.finalTest, snapshot.total
+            ]);
+          });
+
+          const ws = XLSX.utils.aoa_to_sheet(rows);
+          XLSX.utils.book_append_sheet(wb, ws, unit);
+        });
+
+        // الخلاصة: متوسط القيم النهائية المقروءة من صفحات الوحدات فقط.
+        const summaryHeader = ['رقم', 'اسم الطالب', 'الفصل', 'واجب', 'نشاط', 'مشاركه', 'اختبار', 'المجموع'];
+        const summaryRows = [summaryHeader];
+        list.forEach(item => {
+          let sumHw=0, sumAct=0, sumPart=0, sumTest=0, sumTotal=0;
+          selectedUnits.forEach(unit => {
+            const snapshot = unitSnapshots[unit][`${item.class}__${item.name}`];
+            sumHw += asNumber(snapshot.finalHw);
+            sumAct += asNumber(snapshot.finalAct);
+            sumPart += asNumber(snapshot.finalParticipation);
+            sumTest += asNumber(snapshot.finalTest);
+            sumTotal += asNumber(snapshot.total);
+          });
+          const n = selectedUnits.length || 1;
+          summaryRows.push([
+            map[item.name] || '', item.name, item.class,
+            (sumHw/n).toFixed(2),
+            (sumAct/n).toFixed(2),
+            (sumPart/n).toFixed(2),
+            (sumTest/n).toFixed(2),
+            (sumTotal/n).toFixed(2)
+          ]);
+        });
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'خلاصة');
+
+        const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+        const blob = new Blob([out], {type:'application/octet-stream'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'data.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      } finally {
+        // يعيد كشف المتابعة إلى ما كان يعرضه المستخدم قبل بدء التصدير.
+        if(classSelect && savedClass){
+          classSelect.value=savedClass;
+          renderFollowupTable(savedActiveUnit);
+        }
+      }
     }
 
-    // === دوال تصدير PDF للطالب ===
     async function exportSingleStudentPDF(){
       const cls=document.getElementById('classSelect').value, today=new Date().toLocaleDateString('ar-SA'), scope=currentStudentReportUnitSelection, scopeLabel=getAttendanceScopeLabel(scope);
-      let rows=''; Object.keys(records).sort().forEach(d=>{ getAttendanceRecordComponents(d,cls,selectedStudentForReport,scope).forEach(({unit,record})=>{
+      let rows='';
+      buildStudentReportRows(cls,selectedStudentForReport,scope).forEach(({date,unit,record})=>{
         const isAbs=record.status==='غائب', isLate=record.status==='متأخر', vio=record.violations?record.violations.length:0;
-        if(isAbs||isLate||vio>0) rows+=`<tr><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;font-weight:bold;color:#007AFF;">${unit}</td><td class="pdf-student-name-cell" style="border:1px solid #D1D1D6;padding:6px;text-align:center;font-weight:bold;">${d}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${isAbs?'#FF3B30':'#333'};font-weight:${isAbs?'900':'normal'};">${isAbs?'غائب':'-'}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${isLate?'#FF9500':'#333'};font-weight:${isLate?'900':'normal'};">${isLate?'متأخر':'-'}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${vio>0?'#AF52DE':'#333'};font-weight:${vio>0?'900':'normal'};">${vio>0?vio:'-'}</td></tr>`;
-      }); });
+        rows+=`<tr><td class="pdf-student-name-cell" style="border:1px solid #D1D1D6;padding:6px;text-align:center;font-weight:bold;">${date}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;font-weight:bold;color:#007AFF;">${unit}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${isAbs?'#FF3B30':'#333'};font-weight:${isAbs?'900':'normal'};">${isAbs?'غائب':'-'}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${isLate?'#FF9500':'#333'};font-weight:${isLate?'900':'normal'};">${isLate?'متأخر':'-'}</td><td style="border:1px solid #D1D1D6;padding:6px;text-align:center;color:${vio>0?'#AF52DE':'#333'};font-weight:${vio>0?'900':'normal'};">${vio>0?vio:'-'}</td></tr>`;
+      });
       if(!rows) rows='<tr><td colspan="5" style="border:1px solid #D1D1D6;padding:10px;text-align:center;">لا توجد حالات مسجلة.</td></tr>';
-      const table=`<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#007AFF;color:white;"><th style="border:1px solid #007AFF;padding:6px;text-align:center;">الوحدة</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">التاريخ</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">الغياب</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">التأخر</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">عدد المخالفات</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const table=`<table style="width:100%;border-collapse:collapse;font-size:11px;"><thead><tr style="background:#007AFF;color:white;"><th style="border:1px solid #007AFF;padding:6px;text-align:center;">التاريخ</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">الوحدة</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">الغياب</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">التأخر</th><th style="border:1px solid #007AFF;padding:6px;text-align:center;">عدد المخالفات</th></tr></thead><tbody>${rows}</tbody></table>`;
       const title=`تقرير مخالفات الطالب: ${selectedStudentForReport} — ${scopeLabel}`, sub=`<span>الفصل: ${cls}</span><span>الوحدة: ${scopeLabel}</span><span>تاريخ الإصدار: ${today}</span>`;
       const el=buildPdfElement(table,title,sub,'',getPdfSizes('singleStudent')); await exportPdf(el,`تقرير_مخالفات_${selectedStudentForReport}_${scopeLabel}.pdf`,{jsPDF:{unit:'mm',format:'a4',orientation:'portrait'},margin:8});
     }
 
     function exportSingleStudentCSV(){
       const cls=document.getElementById('classSelect').value, scope=currentStudentReportUnitSelection, scopeLabel=getAttendanceScopeLabel(scope);
-      let csv="\uFEFFالوحدة,التاريخ,الغياب,التأخر,عدد المخالفات\n";
-      Object.keys(records).sort().forEach(d=>{ getAttendanceRecordComponents(d,cls,selectedStudentForReport,scope).forEach(({unit,record})=>{ const isAbs=record.status==='غائب', isLate=record.status==='متأخر', vio=record.violations?record.violations.length:0; if(isAbs||isLate||vio>0) csv+=`${unit},${d},${isAbs?'غائب':''},${isLate?'متأخر':''},${vio}\n`; }); });
+      let csv="\uFEFFالتاريخ,الوحدة,الغياب,التأخر,عدد المخالفات\n";
+      buildStudentReportRows(cls,selectedStudentForReport,scope).forEach(({date,unit,record})=>{
+        const isAbs=record.status==='غائب', isLate=record.status==='متأخر', vio=record.violations?record.violations.length:0;
+        csv+=`${date},${unit},${isAbs?'غائب':''},${isLate?'متأخر':''},${vio}\n`;
+      });
       downloadFile(csv,`تقرير_مخالفات_${selectedStudentForReport}_${scopeLabel}.csv`,'text/csv;charset=utf-8;');
     }
 
