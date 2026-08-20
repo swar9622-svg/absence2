@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <!-- 🔢 رقم إصدار التطبيق — غيّر الرقم هنا فقط ليتحدث تلقائياً في كل الشاشات -->
-  <script>const APP_VERSION = "15.0";</script>
+  <script>const APP_VERSION = "15.1";</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2992,8 +2992,9 @@
         const wObj=computeWeightedScores(cls,s,selected);
         let fHw=wObj.hw, fAct=wObj.act, fTest=wObj.test, wScore=wObj.total, part=wObj.participation;
         let rawPart=calculateStudentParticipationScore(cls,s); // درجة المشاركة الخام بدون إضافة نصيب المشروع (للجدول الصغير فقط)
-        // الجدول العلوي: بطاقة مستقلة لكل وحدة، بلا عمود «الوحدة» داخل الصفوف.
-        // كل بطاقة تضم رأس الوحدة ثم أعمدة أفقية (درس / واجب / نشاط) وقيمها.
+        // الجدول العلوي: ثلاثة أعمدة فقط (الدرس / الواجب / النشاط).
+        // قيمة «عدد الصفوف لكل عمود» تشمل عنوان الوحدة ورأس الأعمدة وصفوف الدروس وصف الموزونات.
+        // إذا لم تتسع البطاقة التالية كاملة، يبقى آخر العمود فارغاً وتنتقل البطاقة مع رأسها إلى العمود التالي.
         const upperUnitThemes=[
           {title:'#1F6F4A',header:'#D7EEDD',body:'#F8FCF9',border:'#5BA875'},
           {title:'#B86735',header:'#F8E0CC',body:'#FFF9F4',border:'#D68C56'},
@@ -3003,16 +3004,19 @@
           {title:'#7B6A21',header:'#F3EDC9',body:'#FFFDF3',border:'#B6A34A'}
         ];
         const getUpperTheme=unit=>upperUnitThemes[Math.max(0,selected.indexOf(unit))%upperUnitThemes.length];
+        const notificationFontFamily=fontSettings.family==='system'
+          ? "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+          : `'${fontSettings.family.replace(/\+/g,' ')}','Segoe UI',Tahoma,sans-serif`;
+        const notificationFontStyle=`font-family:${notificationFontFamily}!important;font-weight:${fontSettings.weight}!important;`;
         const unitBlocks=unitData.map(unit=>{
           const theme=getUpperTheme(unit.name);
-          const lessonRows=Math.max(1,Math.ceil(unit.lessons.length/2));
-          // العنوان + عناوين الأعمدة + صفوف الدروس + صف الموزونات.
-          return {...unit,theme,requiredRows:lessonRows+3};
+          // صف العنوان + صف عناوين الأعمدة + صف لكل درس + صف الموزونات.
+          return {...unit,theme,requiredRows:unit.lessons.length+3};
         });
         const cols=[];
         let currentCol=[], usedRows=0;
         unitBlocks.forEach(block=>{
-          // إذا لم تكف المساحة لرأس الوحدة وبطاقتها، يظل المتبقي فارغاً وتبدأ البطاقة في العمود التالي.
+          // لا يبدأ عنوان وحدة أو رأس أعمدتها في المساحة الأخيرة: تنتقل البطاقة كاملة.
           if(currentCol.length>0 && usedRows+block.requiredRows>rows){
             cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
             currentCol=[]; usedRows=0;
@@ -3023,24 +3027,22 @@
         if(currentCol.length>0) cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
         if(cols.length===0) cols.push({blocks:[],blankRows:rows});
 
-        let main='<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;"><tr>';
+        let main=`<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;${notificationFontStyle}"><tr>`;
         cols.forEach(col=>{
-          main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;">`;
+          main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;${notificationFontStyle}">`;
           col.blocks.forEach(block=>{
             const {name,lessons,hw,act,mozHw,mozAct,theme}=block;
-            main+=`<table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid ${theme.border};border-radius:8px;margin-bottom:3px;font-size:${upperTableSize}px;direction:rtl;background:${theme.body};"><thead><tr><th colspan="6" style="padding:3px 2px;text-align:center;background:${theme.title};color:#fff;font-weight:900;font-size:${Math.max(upperTableSize,5)}px;letter-spacing:.1px;">${name}</th></tr><tr style="background:${theme.header};color:${theme.title};"><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">نشاط</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;">نشاط</th></tr></thead><tbody>`;
-            for(let lessonIndex=0;lessonIndex<Math.max(lessons.length,1);lessonIndex+=2){
-              const first=lessons[lessonIndex]||'', second=lessons[lessonIndex+1]||'';
-              const firstHw=first!==''&&hw[first]!==undefined?hw[first]:'';
-              const firstAct=first!==''&&act[first]!==undefined?act[first]:'';
-              const secondHw=second!==''&&hw[second]!==undefined?hw[second]:'';
-              const secondAct=second!==''&&act[second]!==undefined?act[second]:'';
-              main+=`<tr style="background:${theme.body};"><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:700;">${first||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${firstHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${firstAct||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:700;">${second||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${secondHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;font-weight:800;">${secondAct||'&nbsp;'}</td></tr>`;
-            }
-            main+=`<tr style="background:${theme.header};"><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;font-weight:900;color:${theme.title};">موزونة الواجبات: ${(mozHw||0).toFixed(2)}</td><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;font-weight:900;color:${theme.title};">موزونة الأنشطة: ${(mozAct||0).toFixed(2)}</td></tr></tbody></table>`;
+            main+=`<table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid ${theme.border};border-radius:8px;margin-bottom:3px;font-size:${upperTableSize}px;direction:rtl;background:${theme.body};${notificationFontStyle}"><thead><tr><th colspan="3" style="padding:3px 2px;text-align:center;background:${theme.title};color:#fff;font-size:${Math.max(upperTableSize,5)}px;letter-spacing:.1px;${notificationFontStyle}">${name}</th></tr><tr style="background:${theme.header};color:${theme.title};"><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">نشاط</th></tr></thead><tbody>`;
+            const displayLessons=lessons.length?lessons:[''];
+            displayLessons.forEach(lesson=>{
+              const lessonHw=lesson!==''&&hw[lesson]!==undefined?hw[lesson]:'';
+              const lessonAct=lesson!==''&&act[lesson]!==undefined?act[lesson]:'';
+              main+=`<tr style="background:${theme.body};"><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lesson||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lessonHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lessonAct||'&nbsp;'}</td></tr>`;
+            });
+            main+=`<tr style="background:${theme.header};"><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;color:${theme.title};${notificationFontStyle}">موزونة الواجبات: ${(mozHw||0).toFixed(2)} &nbsp; | &nbsp; موزونة الأنشطة: ${(mozAct||0).toFixed(2)}</td></tr></tbody></table>`;
           });
-          // المساحة المتبقية فارغة عند نقل رأس الوحدة التالية إلى العمود التالي.
-          if(col.blankRows>0) main+=`<div style="height:${Math.max(3,col.blankRows*(upperTableSize+5))}px;"></div>`;
+          // ارتفاع فارغ يعادل الصفوف المتبقية التي اختارها المستخدم.
+          if(col.blankRows>0) main+=`<div style="height:${Math.max(3,col.blankRows*(upperTableSize+6))}px;"></div>`;
           main+='</td>';
         });
         main+='</tr></table>';
