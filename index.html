@@ -3,7 +3,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <!-- 🔢 رقم إصدار التطبيق — غيّر الرقم هنا فقط ليتحدث تلقائياً في كل الشاشات -->
-  <script>const APP_VERSION = "15.1";</script>
+  <script>const APP_VERSION = "15.2";</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -875,6 +875,11 @@
       <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap;">
         <span class="field-label" style="font-size:0.75rem;margin:0;">عدد الصفوف لكل عمود:</span>
         <input type="number" id="notificationRowsPerColumn" class="notification-input" value="8" min="2" max="20" style="width:70px;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:0.76rem;font-weight:800;color:var(--text-primary);cursor:pointer;">
+          <input type="checkbox" id="notificationTablePerUnit" checked style="width:18px;height:18px;accent-color:var(--accent);">
+          جدول لكل وحدة
+        </label>
+        <span style="font-size:0.65rem;color:#777;">عند إلغائه يستمر الجدول عبر الأعمدة حسب عدد الصفوف.</span>
       </div>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;align-items:center;flex-wrap:wrap;">
         <span class="field-label" style="font-size:0.75rem;margin:0;">حجم خط الجدول العلوي (px):</span>
@@ -2903,6 +2908,7 @@
         document.getElementById('notificationTopText').value=saved.topText||'';
         document.getElementById('notificationBottomText').value=saved.bottomText||'';
         document.getElementById('notificationRowsPerColumn').value=saved.rowsPerColumn||8;
+        document.getElementById('notificationTablePerUnit').checked=saved.tablePerUnit!==false;
         document.getElementById('notificationUpperTableFontSize').value=saved.upperTableFontSize||saved.tableFontSize||7;
         const legacyLower=saved.lowerTablesFontSize||saved.tableFontSize||7;
         document.getElementById('notificationParticipationTableFontSize').value=saved.participationTableFontSize||legacyLower;
@@ -2932,6 +2938,7 @@
           topText:document.getElementById('notificationTopText').value,
           bottomText:document.getElementById('notificationBottomText').value,
           rowsPerColumn:document.getElementById('notificationRowsPerColumn').value,
+          tablePerUnit:document.getElementById('notificationTablePerUnit').checked,
           upperTableFontSize:upper,
           participationTableFontSize:participation,
           testsTableFontSize:tests,
@@ -2957,6 +2964,7 @@
       if(selected.length===0){ alert("يرجى اختيار وحدة واحدة على الأقل!"); return; }
       saveNotificationSettings();
       let rows=parseInt(document.getElementById('notificationRowsPerColumn').value)||8; if(rows<2) rows=2; if(rows>20) rows=20;
+      const tablePerUnit=document.getElementById('notificationTablePerUnit').checked;
       let upperTableSize=parseInt(document.getElementById('notificationUpperTableFontSize').value)||7; if(upperTableSize<3) upperTableSize=3; if(upperTableSize>18) upperTableSize=18;
       let participationTableSize=parseInt(document.getElementById('notificationParticipationTableFontSize').value)||7; if(participationTableSize<3) participationTableSize=3; if(participationTableSize>18) participationTableSize=18;
       let testsTableSize=parseInt(document.getElementById('notificationTestsTableFontSize').value)||7; if(testsTableSize<3) testsTableSize=3; if(testsTableSize>18) testsTableSize=18;
@@ -2993,8 +3001,7 @@
         let fHw=wObj.hw, fAct=wObj.act, fTest=wObj.test, wScore=wObj.total, part=wObj.participation;
         let rawPart=calculateStudentParticipationScore(cls,s); // درجة المشاركة الخام بدون إضافة نصيب المشروع (للجدول الصغير فقط)
         // الجدول العلوي: ثلاثة أعمدة فقط (الدرس / الواجب / النشاط).
-        // قيمة «عدد الصفوف لكل عمود» تشمل عنوان الوحدة ورأس الأعمدة وصفوف الدروس وصف الموزونات.
-        // إذا لم تتسع البطاقة التالية كاملة، يبقى آخر العمود فارغاً وتنتقل البطاقة مع رأسها إلى العمود التالي.
+        // «جدول لكل وحدة»: البطاقة كاملة لا تنقسم. عند إلغاء الخيار: الدروس تستمر عبر الأعمدة وفق عدد الصفوف.
         const upperUnitThemes=[
           {title:'#1F6F4A',header:'#D7EEDD',body:'#F8FCF9',border:'#5BA875'},
           {title:'#B86735',header:'#F8E0CC',body:'#FFF9F4',border:'#D68C56'},
@@ -3008,44 +3015,73 @@
           ? "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
           : `'${fontSettings.family.replace(/\+/g,' ')}','Segoe UI',Tahoma,sans-serif`;
         const notificationFontStyle=`font-family:${notificationFontFamily}!important;font-weight:${fontSettings.weight}!important;`;
-        const unitBlocks=unitData.map(unit=>{
-          const theme=getUpperTheme(unit.name);
-          // صف العنوان + صف عناوين الأعمدة + صف لكل درس + صف الموزونات.
-          return {...unit,theme,requiredRows:unit.lessons.length+3};
-        });
-        const cols=[];
-        let currentCol=[], usedRows=0;
-        unitBlocks.forEach(block=>{
-          // لا يبدأ عنوان وحدة أو رأس أعمدتها في المساحة الأخيرة: تنتقل البطاقة كاملة.
-          if(currentCol.length>0 && usedRows+block.requiredRows>rows){
-            cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
-            currentCol=[]; usedRows=0;
-          }
-          currentCol.push(block);
-          usedRows+=block.requiredRows;
-        });
-        if(currentCol.length>0) cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
-        if(cols.length===0) cols.push({blocks:[],blankRows:rows});
+        const unitBlocks=unitData.map(unit=>({
+          ...unit,
+          theme:getUpperTheme(unit.name),
+          // العنوان + رأس الأعمدة + الدروس + صف موزونة واحد.
+          requiredRows:Math.max(1,unit.lessons.length)+3
+        }));
+        const cellStyle=(theme,extra='')=>`border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}${extra}`;
+        const headerCells=theme=>`<th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">نشاط</th>`;
+        const lessonRow=(lesson,block)=>{
+          const lessonHw=lesson!==''&&block.hw[lesson]!==undefined?block.hw[lesson]:'';
+          const lessonAct=lesson!==''&&block.act[lesson]!==undefined?block.act[lesson]:'';
+          return `<tr style="background:${block.theme.body};"><td style="${cellStyle(block.theme)}">${lesson||'&nbsp;'}</td><td style="${cellStyle(block.theme)}">${lessonHw||'&nbsp;'}</td><td style="${cellStyle(block.theme)}">${lessonAct||'&nbsp;'}</td></tr>`;
+        };
+        const weightedRow=block=>`<tr style="background:${block.theme.header};"><td style="border:1px solid ${block.theme.border};padding:2px;text-align:center;color:${block.theme.title};${notificationFontStyle}">الموزونة</td><td style="border:1px solid ${block.theme.border};padding:2px;text-align:center;color:${block.theme.title};${notificationFontStyle}">${(block.mozHw||0).toFixed(2)}</td><td style="border:1px solid ${block.theme.border};padding:2px;text-align:center;color:${block.theme.title};${notificationFontStyle}">${(block.mozAct||0).toFixed(2)}</td></tr>`;
+        let main='';
 
-        let main=`<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;${notificationFontStyle}"><tr>`;
-        cols.forEach(col=>{
-          main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;${notificationFontStyle}">`;
-          col.blocks.forEach(block=>{
-            const {name,lessons,hw,act,mozHw,mozAct,theme}=block;
-            main+=`<table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid ${theme.border};border-radius:8px;margin-bottom:3px;font-size:${upperTableSize}px;direction:rtl;background:${theme.body};${notificationFontStyle}"><thead><tr><th colspan="3" style="padding:3px 2px;text-align:center;background:${theme.title};color:#fff;font-size:${Math.max(upperTableSize,5)}px;letter-spacing:.1px;${notificationFontStyle}">${name}</th></tr><tr style="background:${theme.header};color:${theme.title};"><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">الدرس</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">واجب</th><th style="border:1px solid ${theme.border};padding:2px;text-align:center;${notificationFontStyle}">نشاط</th></tr></thead><tbody>`;
-            const displayLessons=lessons.length?lessons:[''];
-            displayLessons.forEach(lesson=>{
-              const lessonHw=lesson!==''&&hw[lesson]!==undefined?hw[lesson]:'';
-              const lessonAct=lesson!==''&&act[lesson]!==undefined?act[lesson]:'';
-              main+=`<tr style="background:${theme.body};"><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lesson||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lessonHw||'&nbsp;'}</td><td style="border:1px solid #D9E0E0;padding:2px;text-align:center;${notificationFontStyle}">${lessonAct||'&nbsp;'}</td></tr>`;
-            });
-            main+=`<tr style="background:${theme.header};"><td colspan="3" style="border:1px solid ${theme.border};padding:2px;text-align:center;color:${theme.title};${notificationFontStyle}">موزونة الواجبات: ${(mozHw||0).toFixed(2)} &nbsp; | &nbsp; موزونة الأنشطة: ${(mozAct||0).toFixed(2)}</td></tr></tbody></table>`;
+        if(tablePerUnit){
+          // النمط المحفوظ: بطاقة وحدة كاملة. يضبط عدد الصفوف مكان انتقال البطاقة لا عدد الدروس فقط.
+          const cols=[]; let currentCol=[], usedRows=0;
+          unitBlocks.forEach(block=>{
+            if(currentCol.length>0 && usedRows+block.requiredRows>rows){
+              cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
+              currentCol=[]; usedRows=0;
+            }
+            currentCol.push(block); usedRows+=block.requiredRows;
           });
-          // ارتفاع فارغ يعادل الصفوف المتبقية التي اختارها المستخدم.
-          if(col.blankRows>0) main+=`<div style="height:${Math.max(3,col.blankRows*(upperTableSize+6))}px;"></div>`;
-          main+='</td>';
-        });
-        main+='</tr></table>';
+          if(currentCol.length>0) cols.push({blocks:currentCol,blankRows:Math.max(0,rows-usedRows)});
+          if(cols.length===0) cols.push({blocks:[],blankRows:rows});
+          main=`<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;${notificationFontStyle}"><tr>`;
+          cols.forEach(col=>{
+            main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;${notificationFontStyle}">`;
+            col.blocks.forEach(block=>{
+              const displayLessons=block.lessons.length?block.lessons:[''];
+              main+=`<table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid ${block.theme.border};border-radius:8px;margin-bottom:3px;font-size:${upperTableSize}px;direction:rtl;background:${block.theme.body};${notificationFontStyle}"><thead><tr><th colspan="3" style="padding:3px 2px;text-align:center;background:${block.theme.title};color:#fff;font-size:${Math.max(upperTableSize,5)}px;${notificationFontStyle}">${block.name}</th></tr><tr style="background:${block.theme.header};color:${block.theme.title};">${headerCells(block.theme)}</tr></thead><tbody>`;
+              displayLessons.forEach(lesson=>{ main+=lessonRow(lesson,block); });
+              main+=weightedRow(block)+'</tbody></table>';
+            });
+            if(col.blankRows>0) main+=`<div style="height:${Math.max(3,col.blankRows*(upperTableSize+6))}px;"></div>`;
+            main+='</td>';
+          });
+          main+='</tr></table>';
+        } else {
+          // النمط المتصل: يحترم عدد الصفوف حرفياً؛ الدروس والموزونة تستكمل في العمود التالي.
+          const cols=[[]]; let usedRows=0;
+          const pushRow=(html,kind)=>{
+            if(usedRows>=rows){ cols.push([]); usedRows=0; }
+            cols[cols.length-1].push({html,kind}); usedRows++;
+          };
+          unitBlocks.forEach(block=>{
+            // لا نضع عنوان الوحدة أو رأس الأعمدة في آخر صف: نتركه فارغاً ونبدأ في العمود التالي.
+            const minRowsForNewUnit=rows>=3?3:2; // عنوان + رأس أعمدة + أول درس عند توفر ثلاثة صفوف.
+            if(usedRows>0 && rows-usedRows<minRowsForNewUnit){ cols.push([]); usedRows=0; }
+            pushRow(`<tr style="background:${block.theme.title};"><td colspan="3" style="padding:3px 2px;text-align:center;color:#fff;font-size:${Math.max(upperTableSize,5)}px;${notificationFontStyle}">${block.name}</td></tr>`,'unit-title');
+            pushRow(`<tr style="background:${block.theme.header};color:${block.theme.title};">${headerCells(block.theme)}</tr>`,'column-head');
+            const displayLessons=block.lessons.length?block.lessons:[''];
+            displayLessons.forEach(lesson=>{ pushRow(lessonRow(lesson,block),'lesson'); });
+            pushRow(weightedRow(block),'weighted');
+          });
+          main=`<table style="width:100%;border-collapse:separate;border-spacing:3px;direction:rtl;margin-bottom:4px;font-size:inherit;${notificationFontStyle}"><tr>`;
+          cols.forEach(col=>{
+            main+=`<td style="vertical-align:top;width:${100/cols.length}%;padding:0;${notificationFontStyle}"><table style="width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:2px solid #BFC9CA;border-radius:8px;font-size:${upperTableSize}px;direction:rtl;${notificationFontStyle}"><tbody>`;
+            col.forEach(row=>{ main+=row.html; });
+            for(let blank=col.length;blank<rows;blank++) main+=`<tr><td colspan="3" style="${cellStyle({},'height:'+(upperTableSize+6)+'px;')}">&nbsp;</td></tr>`;
+            main+='</tbody></table></td>';
+          });
+          main+='</tr></table>';
+        }
 
         // جدول المشاركة يستحوذ على المساحة الأكبر في الجزء السفلي، ويظهر حسب نمط الاحتساب.
         let partHtml='';
