@@ -5162,7 +5162,31 @@ ${description}`)) return;
         img.src=url;
       });
     }
-    function extractStudentNamesFromOcr(text){ const blocked=['اسم الطالب','الطالب','الاسم','العدد','الرقم','رقم','الفصل','الصف','المجموع','الغياب','التوقيع','ملاحظات']; const seen=new Set(), names=[]; String(text||'').split(/\r?\n/).map(line=>line.replace(/[|¦]/g,' ').replace(/^[\s٠-٩0-9.)،,\-]+/,'').replace(/[٠-٩0-9]+[\s.)،,\-]*$/,'').replace(/\s+/g,' ').trim()).forEach(line=>{ if(line.length<3||!/[ء-ي]/.test(line)||/^[٠-٩0-9\\s.,،()\\-]+$/.test(line)||blocked.some(word=>line===word||line.includes(word+':'))) return; if(!seen.has(line)){seen.add(line);names.push(line);} }); return names; }
+    function extractStudentNamesFromOcr(text){
+      const blocked=['اسم الطالب','الطالب','الاسم','العدد','الرقم','رقم','الفصل','الصف','المجموع','الغياب','التوقيع','ملاحظات'];
+      const seen=new Set(), names=[];
+      String(text||'').split(/\r?\n/).forEach(raw=>{
+        const line=String(raw)
+          .replace(/[|¦_~`^*#@$%•<>{}[\]\\/+"'،:：؛;=]+/g,' ') // رموز وخطوط جدول لا تظهر أبداً داخل اسم حقيقي
+          .replace(/^[\s٠-٩0-9.)،,\-]+/,'')
+          .replace(/[٠-٩0-9]+[\s.)،,\-]*$/,'')
+          .replace(/\s+/g,' ')
+          .trim();
+        if(!line) return;
+        if(/[0-9٠-٩]/.test(line)) return; // اسم الطالب الحقيقي لا يحتوي أي رقم إطلاقاً (يستبعد بقايا عمود الأرقام)
+        const letters=(line.match(/[ء-ي]/g)||[]).length;
+        const nonSpace=line.replace(/\s/g,'').length;
+        if(nonSpace===0) return;
+        const letterRatio=letters/nonSpace;
+        const words=line.split(' ').filter(Boolean);
+        // اسم الطالب الحقيقي: عدة كلمات عربية متتالية بلا أرقام أو رموز مختلطة (لاستبعاد بقايا عمود الأرقام وخطوط الجدول)
+        if(letters<6||letterRatio<0.92||words.length<2) return;
+        if(words.some(w=>(w.match(/[ء-ي]/g)||[]).length<2)) return; // استبعاد حرف/كلمة منفردة شاردة بين الكلمات (بقايا خطوط أو رموز)
+        if(blocked.some(word=>line===word||line.includes(word+':'))) return;
+        if(!seen.has(line)){ seen.add(line); names.push(line); }
+      });
+      return names;
+    }
     async function processStudentRosterImage(event){ const file=event.target.files?.[0]; event.target.value=''; if(!file) return; if(!/^image\//.test(file.type)){ setStudentOcrStatus('اختر صورة كشف بصيغة صورة صحيحة.','error'); return; } if(typeof Tesseract==='undefined'){ setStudentOcrStatus('تعذر تشغيل التعرف حالياً. تأكد من اتصال الإنترنت ثم حاول مرة أخرى.','error'); return; } setStudentOcrStatus('جارٍ قراءة الكشف… قد يستغرق ذلك قليلاً حسب حجم الصورة.'); try { let ocrSource=file; try{ ocrSource=await preprocessStudentRosterImage(file); }catch(prepErr){ console.error(prepErr); } const result=await Tesseract.recognize(ocrSource,'ara',{ logger:info=>{ if(info?.status==='recognizing text'&&Number.isFinite(info.progress)) setStudentOcrStatus('جارٍ قراءة الكشف… '+Math.round(info.progress*100)+'٪'); } }); const names=extractStudentNamesFromOcr(result?.data?.text||''); if(!names.length){ setStudentOcrStatus('لم أتعرف على أسماء واضحة. جرّب صورة مستقيمة ومضيئة، أو اكتب الأسماء يدوياً.','error'); return; } const textarea=document.getElementById('studentNamesTextarea'); const existing=textarea?.value.split(/\r?\n/).map(n=>n.trim()).filter(Boolean)||[]; const merged=[...existing,...names.filter(name=>!existing.includes(name))]; if(textarea) textarea.value=merged.join('\n'); setStudentOcrStatus('تمت قراءة '+names.length+' اسماً. راجع القائمة وعدّلها قبل الضغط على حفظ الأسماء.','success'); } catch(err){ console.error(err); setStudentOcrStatus('تعذر قراءة الصورة. جرّب صورة أوضح أو أدخل الأسماء يدوياً.','error'); } }
     function saveStudentsFromTextarea(){ const cls=getStudentNamesSelectedClass(); if(!cls){ alert('اختر فصلاً أولاً.'); return; } const names=document.getElementById('studentNamesTextarea').value.split('\n').map(n=>n.trim()).filter(n=>n!==''); appData[cls]=names; saveData(); const classSelect=document.getElementById('classSelect'); if(classSelect&&[...classSelect.options].some(option=>option.value===cls)) classSelect.value=cls; renderStudents(); if(document.getElementById('editStudentNameModal').style.display==='flex') renderEditStudentList(); }
     function toggleAddClassBox(){ const box=document.getElementById('inlineAddBox'); if(!activeGradeName){ alert('أضف صفاً أولاً ثم أضف فصوله.'); return; } const opening=box.style.display!=='grid'; box.style.display=opening?'grid':'none'; if(opening){ document.getElementById('newClassGradeLabel').textContent=activeGradeName; document.getElementById('newClassInput').focus(); } }
